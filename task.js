@@ -88,11 +88,12 @@
 
     // 把渲染DOM有关的函数放在view命名空间下
     var view = {
+        el:document.querySelector('.api-chart-wrap'),
         render: function(data) {
             var className,
 
                 // 以div.api-chart-wrap元素作为画布
-                canvas = document.querySelector('.api-chart-wrap'),
+                canvas = this.el,
 
                 // 先找到空气指数的最大值
                 maxValue = data.reduce(function(pre, data) {
