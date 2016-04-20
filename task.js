@@ -34,162 +34,120 @@
 
     // 以上是随机生成的数据
 
-
-    // 与数据有关的函数放在model命名空间下
+    //学习设计为mvc使数据和表现分离，分为model，view，controller
+    //model,数据存储及处理相关
     var model = {
-        // 保存着随机数据        
         data: aqiSourceData,
-
-        // 接收城市名和粒度，获得一个包含统计数据的数组
-        getStatistics: function(city, type) {
-            var statisticsResult = [],
-                cityData = this.data[city],
-                dates = Object.keys(cityData),
-
-                // 该高阶函数负责制造用于reduce的函数
-                getCalculatingFunc = function(period) {
-                    return function(previousValue, date, index) {
-                        var sumUntilNow = previousValue + cityData[date];
-
-                        // 根据周期（1、7或30）的不同，获得不同的平均数
-                        if ((index + 1) % period === 0 || index === dates.length) {
-                            // 数组的成员是含有date属性和value属性的对象
-                            statisticsResult.push({
-                                date: date,
-                                value: Math.floor(sumUntilNow / period)
-                            });
+        cityNames: function() {
+            var self = this;
+            return Object.keys(self.data);
+        },
+        //处理数据，传入参数为城市，以及日期粒度，返回供渲染的数据
+        processDate: function(city, unit) {
+            var resultData = [],
+                city = this.data[city],
+                cityTime = Object.keys(city);
+                //建立一个高阶函数，实现在reduce方法中再传入其他的参数
+                function getResultData(fineness) {
+                    return function(prev, cur, index) {
+                        var data = prev + city[cur];
+                        if((index + 1) % fineness == 0 || index == cityTime.length) {
+                            resultData.push({
+                                date: cur,
+                                value: Math.floor(data/fineness)
+                            })
                             return 0;
-                        } else {
-                            return sumUntilNow;
+                        }else {
+                            return data;
                         }
-                    };
-                };
-
-            switch (type) {
-                case 'day':
-                    dates.reduce(getCalculatingFunc(1), 0);
+                    }
+                }
+                switch(unit) {
+                    case 'day':
+                    cityTime.reduce(getResultData(1),0);
                     break;
-
-                case 'week':
-                    dates.reduce(getCalculatingFunc(7), 0);
+                    case 'week':
+                    cityTime.reduce(getResultData(7),0);
                     break;
-
-                case 'month':
-                    dates.reduce(getCalculatingFunc(30), 0);
-                    break;
-
-                default:
-                    throw new Error('不合法的周期。必须是月、周或日');
-            }
-
-            return statisticsResult;
+                    case 'month':
+                    cityTime.reduce(getResultData(30),0);
+                }
+                return resultData;
         }
     };
-
-    // 把渲染DOM有关的函数放在view命名空间下
+    // view,视图渲染相关
     var view = {
-        el:document.querySelector('.api-chart-wrap'),
-        render: function(data) {
+        drawSelect: function() {
+            var data = model.cityNames(),
+                select = document.getElementById('city-select');
+            data.forEach(function(city){
+                var option = document.createElement('option');
+                option.value = option.text = city;
+                select.appendChild(option);
+            });
+        },
+        drawChart: function(data) {
             var className,
-
-                // 以div.api-chart-wrap元素作为画布
-                canvas = this.el,
-
-                // 先找到空气指数的最大值
-                maxValue = data.reduce(function(pre, data) {
-                    if (data.value > pre) return data.value;
+                chart = document.querySelector('.api-chart-wrap'),
+                maxValue = data.reduce(function(pre, cur) {
+                    if(cur.value > pre) return cur.value;
                     else return pre;
                 }, 0);
+                if(data.length <= 3) className = 'month';
+                else if(data.length > 3 && data.length < 90) className = 'week';
+                else className = 'day';
+                function getColor(airQuality) {
 
-            function getColor(airQuality) {
+                    // 根据污染严重程度：绿 蓝 红 紫 黑
+                    var colors = ['#008200', '#0100FD', '#FD0002', '#810381', '#000000'];
 
-                // 根据污染严重程度：绿 蓝 红 紫 黑
-                var colors = ['#008200', '#0100FD', '#FD0002', '#810381', '#000000'];
-
-                if (airQuality <= 50) return colors[0];
-                else if (airQuality < 100) return colors[1];
-                else if (airQuality < 200) return colors[2];
-                else if (airQuality < 300) return colors[3];
-                else return colors[4];
+                    if (airQuality <= 50) return colors[0];
+                    else if (airQuality < 100) return colors[1];
+                    else if (airQuality < 200) return colors[2];
+                    else if (airQuality < 300) return colors[3];
+                    else return colors[4];
             }
-
-            if (data.length <= 3) className = 'year-bar';
-            else if (data.length > 3 && data.length < 90) className = "month-bar";
-            else className = "day-bar";
-
-            // 总是先清空画布
-            canvas.innerHTML = '';
-
-            data.forEach(function(data) {
-                var divEle = document.createElement('div');
-
-                // 设置好高度、背景色等等
-                divEle.className = className;
-                divEle.title = '日期：' + data.date + '  数值：' + data.value;
-                divEle.style.height = (Math.floor((data.value / maxValue) * 100)) + '%';
-                divEle.style.backgroundColor = getColor(data.value);
-
-                canvas.appendChild(divEle);
-            });
+            chart.innerHTML = '';
+                data.forEach(function(data) {
+                    var item = document.createElement('div');
+                    item.className = className;
+                    item.style.backgroundColor = getColor(data.value);
+                    console.log(data);
+                    item.style.height  = Math.floor(data.value/maxValue*100) + "%";
+                    item.title = '日期：' + data.date + '  数值：' + data.value;
+                    chart.appendChild(item);
+                })
         }
-
-
-    };
-
-    // 把事件绑定、当前的画布情况等放在controller命名空间下
-    var controller = {
-        // 这个对象保存着当前画布显示的内容的情况
-        // 先设定好初始状况
-        _status: {
-            gra: document.querySelector('[name="gra-time"]:checked').value,
-            city: '北京'
-        },
-
-        // 负责绑定事件
-        _bind: function() {
-            var graTimeForm = document.getElementById('form-gra-time'),
-                citySelect = document.getElementById('city-select'),
-                that = this;
-
-            // 事件代理。根据表单的变动更改_status的记录
-            function changeHandler(e) {
-                var target = e.target;
-                if (target.matches('input[name="gra-time"]')) {
-                    that._status.gra = target.value;
-                } else if (target.matches('#city-select')) {
-                    that._status.city = target.value;
-                } else return true;
-
-                // 根据_status渲染    
-                var data = model.getStatistics(that._status.city, that._status.gra);
-                view.render(data);
-            }
-
-            // 单选input或select一旦有变，则触发事件代理函数
-            graTimeForm.addEventListener('click', changeHandler);
-            citySelect.addEventListener('change', changeHandler);
-        },
-
+    }
+    // contorller,事件的绑定以及初始化相关状态
+    var contorller = {
         init: function() {
-            var citySelect = document.getElementById('city-select');
-
-            // 填充select的选项
-            Object.keys(model.data).forEach(function(key) {
-                var option = document.createElement('option');
-                option.value = option.text = key;
-                citySelect.appendChild(option);
-            });
-
-            this._bind();
-
-            // 进行初始化的渲染
-            var data = model.getStatistics(this._status.city, this._status.gra);
-            view.render(data);
-
+            view.drawSelect();
+            this.bindEvent();
+            var data = model.processDate(this.status.city, this.status.unit);
+                view.drawChart(data);
+        },
+        status: {
+            city: '北京',
+            unit: document.querySelector('[name="gra-time"]:checked').value
+        },
+        bindEvent: function() {
+            var TimeForm = document.getElementById('form-gra-time'),
+                citySelect = document.getElementById('city-select'),
+                self = this;
+            function handler(e) {
+                var target = e.target;
+                if(target.matches('input[name="gra-time"]')) {
+                    self.status.unit = target.value;
+                }else if(target.matches('#city-select')) {
+                    self.status.city = target.value;
+                }
+                var data = model.processDate(self.status.city,self.status.unit);
+                view.drawChart(data);
+            }
+            TimeForm.addEventListener('click', handler);
+            citySelect.addEventListener('change', handler);
         }
-
-    };
-
-    controller.init();
-
-})();
+    }
+    contorller.init();
+})()
